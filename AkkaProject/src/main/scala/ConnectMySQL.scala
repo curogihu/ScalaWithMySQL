@@ -32,35 +32,26 @@ object ConnectMySQL {
 
       getMatchInfo(cn, st) match {
         case Left(s) =>
-              // checked output
-              println("Error message: " + s);
+              println("Error message: " + s)
               System.exit(0)
 
         case Right(summoner: Summoner) =>
-          // checked output
-          /*
-          println("MatchId = %d, ParticipantId = %d, NameKey = %s, Name = %s".format(matchId,
-                                                                                      participantId,
-                                                                                      summonerNameKey,
-                                                                                     summonerName))
-        */
-          targetSummoner = summoner
+              targetSummoner = summoner
       }
 
-      getItemBuild(cn, st, targetSummoner.matchId, targetSummoner.participantId) match {
+      getItemBuild(cn,st, targetSummoner.matchId, targetSummoner.participantId) match {
         case Left(s) =>
-          // checked output
-          println("Error message: " + s);
+          println("Error message: " + s)
           System.exit(0)
 
         case Right(itemBuildList) =>
           displayItemBuild(itemBuildList)
       }
 
-      cn.close
+      cn.close()
 
     }catch{
-      case e: Exception => e.printStackTrace
+      case e: Exception => e.printStackTrace()
     }
   }
 
@@ -74,8 +65,8 @@ object ConnectMySQL {
     }
   }
 
-  // def getMatchInfo(cn: Connection, st: Statement): Either[String, (Long, Int, String, String)] = {
-  private def getMatchInfo(cn: Connection, st: Statement): Either[String, Summoner] = {
+  private def getMatchInfo(cn: Connection,
+                           st: Statement): Either[String, Summoner] = {
     try {
       val rs = st.executeQuery("select MatchId, " +
                                         "ParticipantId, " +
@@ -91,14 +82,17 @@ object ConnectMySQL {
                         rs.getString("SummonerName")))
 
       } else {
-        Left("MatchPlayer Info table have no records");
+        Left("MatchPlayer Info table have no records")
       }
     }catch{
       case e: Exception => Left("SQL statement is not correct or MatchPlayerInfo table isn't existed");
     }
   }
 
-  private def getItemBuild(cn: Connection, st: Statement, matchId: Long, buyerId: Int): Either[String, List[ItemBuild]] = {
+  private def getItemBuild(cn: Connection,
+                           st: Statement,
+                           matchId: Long,
+                           buyerId: Int): Either[String, List[ItemBuild]] = {
 
     try {
       val rs = st.executeQuery("SELECT c.ChampionName, " +
@@ -118,25 +112,19 @@ object ConnectMySQL {
       rs.last
 
       if(rs.getRow == 0) {
-        Left("MatchPlayer Info table have no records");
+        Left("MatchPlayer Info table have no records")
 
       }else{
         var itemBuildList = List.empty[ItemBuild]
-          //val itemBuildList = collection.mutable.ArrayBug
-
           rs.first
 
           while(rs.next){
-            //println(rs.getInt("PurchaseSeconds"))
             itemBuildList ::= ItemBuild(rs.getString("ChampionName"),
                                         rs.getString("ItemName"),
                                         rs.getString("ItemDescription"),
                                         rs.getInt("ItemGoldTotal"),
                                         rs.getInt("PurchaseSeconds"))
           }
-
-          // output ok
-          //println("value = " + itemBuildList)
           Right(itemBuildList)
       }
 
