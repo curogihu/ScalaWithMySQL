@@ -4,19 +4,16 @@
 
 import java.sql.{Statement, Connection, DriverManager}
 
-case class ItemBuild(itemId: Int,
+case class Summoner(matchId: Long,
+                    participantId: Int,
+                    summonerNameKey: String,
+                    summonerName: String)
+
+case class ItemBuild(championName: String,
                      itemName: String,
                      itemDescription: String,
                      itemGoldTotal: Int,
-                     timeStamp: Long)
-/*
-class ItemBuild{
-  val itemId: Int = _
-  val itemname: String = _
-  val itemDescription: String = _
-  val itemGoldTotal: Int = _
-}
-*/
+                     purchaseSeconds: Int)
 
 object ConnectMySQL {
   def main(args: Array[String]) {
@@ -31,6 +28,7 @@ object ConnectMySQL {
       Class.forName(driver)
       cn = DriverManager.getConnection(url + "/" + database, username, password)
       val st = cn.createStatement
+      var targetSummoner: Summoner = null
 
       getMatchInfo(cn, st) match {
         case Left(s) =>
@@ -38,15 +36,26 @@ object ConnectMySQL {
               println("Error message: " + s);
               System.exit(0)
 
-        case Right((matchId, participantId, summonerNameKey, summonerName)) =>
+        case Right(summoner: Summoner) =>
           // checked output
+          /*
           println("MatchId = %d, ParticipantId = %d, NameKey = %s, Name = %s".format(matchId,
                                                                                       participantId,
                                                                                       summonerNameKey,
-                                                                                      summonerName))
+                                                                                     summonerName))
+        */
+          targetSummoner = summoner
       }
 
+      getItemBuild(cn, st, targetSummoner.matchId, targetSummoner.participantId) match {
+        case Left(s) =>
+          // checked output
+          println("Error message: " + s);
+          System.exit(0)
 
+        case Right(itemBuildList) =>
+          displayItemBuild(itemBuildList)
+      }
 
       cn.close
 
@@ -55,7 +64,18 @@ object ConnectMySQL {
     }
   }
 
-  def getMatchInfo(cn: Connection, st: Statement): Either[String, (Long, Int, String, String)] = {
+  private def displayItemBuild(itemBuildList: List[ItemBuild]): Unit = {
+    for(itemBuild <- itemBuildList){
+      print("Purchase Seconds = %4d, ".format(itemBuild.purchaseSeconds))
+      print("Champion Name = %s, ".format(itemBuild.championName))
+      print("Item Name = %s, ".format(itemBuild.itemName))
+      print("Item Description = %s, ".format(itemBuild.itemDescription))
+      println("ItemGoldTotal = %d".format(itemBuild.itemGoldTotal))
+    }
+  }
+
+  // def getMatchInfo(cn: Connection, st: Statement): Either[String, (Long, Int, String, String)] = {
+  private def getMatchInfo(cn: Connection, st: Statement): Either[String, Summoner] = {
     try {
       val rs = st.executeQuery("select MatchId, " +
                                         "ParticipantId, " +
@@ -65,68 +85,64 @@ object ConnectMySQL {
                                 "ORDER BY RAND() limit 0, 1")
 
       if (rs.next) {
-        Right(rs.getLong("MatchId"),
-              rs.getInt("ParticipantId"),
-              rs.getString("SummonerNameKey"),
-              rs.getString("SummonerName"))
+        Right(Summoner(rs.getLong("MatchId"),
+                        rs.getInt("ParticipantId"),
+                        rs.getString("SummonerNameKey"),
+                        rs.getString("SummonerName")))
 
       } else {
         Left("MatchPlayer Info table have no records");
       }
     }catch{
-      case e: Exception => Left("SQL statement is not correct or MatchPlayer Info table isn't existed");
+      case e: Exception => Left("SQL statement is not correct or MatchPlayerInfo table isn't existed");
     }
   }
 
-/*
-case class ItemBuild(itemId: Int,
-                     itemName: String,
-                     itemDescription: String,
-                     itemGoldTotal: Int,
-                     timeStamp: Long)
- */
+  private def getItemBuild(cn: Connection, st: Statement, matchId: Long, buyerId: Int): Either[String, List[ItemBuild]] = {
 
-
-  def getItemBuild(cn: Connection, st: Statement, matchId: Long, buyerId: Int): Either[String, List[ItemBuild]] = {
     try {
-      val rs = st.executeQuery("select MatchId, " +
-        "ParticipantId, " +
-        "SummonerNameKey, " +
-        "SummonerName " +
-        "from MatchPlayerInfo " +
-        "ORDER BY RAND() limit 0, 1")
+      val rs = st.executeQuery("SELECT c.ChampionName, " +
+                                        "i.ItemName, " +
+                                        "i.ItemDescription, " +
+                                        "i.ItemGoldTotal, " +
+                                        "truncate(ibl.TimeStamp / 1000, 0) PurchaseSeconds " +
+                              "FROM ItemBuildLog ibl " +
+                              "inner join Item i " +
+                                "on ibl.ItemId = i.ItemId " +
+                              "inner join Champion c " +
+                                "on ibl.ChampionId = c.ChampionId " +
+                                  "WHERE  ibl.MatchId = " + matchId + " " +
+                              "and ibl.BuyerId = " + buyerId + " " +
+                            "order by ibl.TimeStamp desc")
 
-/*
-      if (rs.next) {
-        Right(ItemBuild(rs.getInt("ItemId"),
-                        rs.getString("ItemName"),
-                        rs.getString("ItemDescription"),
-                        rs.getInt("ItemGoldTotal"),
-                        rs.getLong("TimeStamp")))
+      rs.last
 
-      } else {
+      if(rs.getRow == 0) {
         Left("MatchPlayer Info table have no records");
-      }
-*/
-      rs.getRow match {
-        case 0 => Left("MatchPlayer Info table have no records");
-        case _ =>
-          var itemBuildList = List.empty[ItemBuild]
+
+      }else{
+        var itemBuildList = List.empty[ItemBuild]
+          //val itemBuildList = collection.mutable.ArrayBug
+
+          rs.first
 
           while(rs.next){
-            itemBuildList :+ ItemBuild(rs.getInt("ItemId"),
+            //println(rs.getInt("PurchaseSeconds"))
+            itemBuildList ::= ItemBuild(rs.getString("ChampionName"),
                                         rs.getString("ItemName"),
                                         rs.getString("ItemDescription"),
                                         rs.getInt("ItemGoldTotal"),
-                                        rs.getLong("TimeStamp"))
+                                        rs.getInt("PurchaseSeconds"))
           }
 
+          // output ok
+          //println("value = " + itemBuildList)
           Right(itemBuildList)
       }
 
     }catch{
-      case e: Exception => Left("SQL statement is not correct or MatchPlayer Info table isn't existed");
+      case e: Exception => Left("SQL statement is not correct or " +
+                                "at least one of three tables, tableMatchPlayerInfo, Item and Champion table isn't existed");
     }
   }
-
 }
