@@ -1,2 +1,2 @@
 # AkkaWithMySQL
-Using Akka with various League of Legends data in MySQL 
+Displaying various League of Legends data in MySQL, MAMP
